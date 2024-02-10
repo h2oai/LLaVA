@@ -4,6 +4,7 @@ import datetime
 import json
 import os
 import time
+import uuid
 
 import gradio as gr
 import requests
@@ -35,7 +36,7 @@ def get_conv_log_filename():
     return name
 
 
-def get_model_list():
+def get_model_list(args):
     ret = requests.post(args.controller_url + "/refresh_all_workers")
     assert ret.status_code == 200
     ret = requests.post(args.controller_url + "/list_models")
@@ -56,12 +57,13 @@ function() {
 
 
 def load_demo(url_params, request: gr.Request):
-    logger.info(f"load_demo. ip: {request.client.host}. params: {url_params}")
+    if request:
+        logger.info(f"load_demo. ip: {request.client.host}. params: {url_params}")
 
     dropdown_update = gr.Dropdown(visible=True)
-    if "model" in url_params:
+    if url_params and "model" in url_params:
         model = url_params["model"]
-        if model in models:
+        if model in models0:
             dropdown_update = gr.Dropdown(
                 value=model, visible=True)
 
@@ -70,8 +72,9 @@ def load_demo(url_params, request: gr.Request):
 
 
 def load_demo_refresh_model_list(request: gr.Request):
-    logger.info(f"load_demo. ip: {request.client.host}")
-    models = get_model_list()
+    if request:
+        logger.info(f"load_demo. ip: {request.client.host}")
+    models = get_model_list(args)
     state = default_conversation.copy()
     dropdown_update = gr.Dropdown(
         choices=models,
@@ -87,31 +90,35 @@ def vote_last_response(state, vote_type, model_selector, request: gr.Request):
             "type": vote_type,
             "model": model_selector,
             "state": state.dict(),
-            "ip": request.client.host,
+            "ip": request.client.host if request else 'Unknown',
         }
         fout.write(json.dumps(data) + "\n")
 
 
 def upvote_last_response(state, model_selector, request: gr.Request):
-    logger.info(f"upvote. ip: {request.client.host}")
+    if request:
+        logger.info(f"upvote. ip: {request.client.host}")
     vote_last_response(state, "upvote", model_selector, request)
     return ("",) + (disable_btn,) * 3
 
 
 def downvote_last_response(state, model_selector, request: gr.Request):
-    logger.info(f"downvote. ip: {request.client.host}")
+    if request:
+        logger.info(f"downvote. ip: {request.client.host}")
     vote_last_response(state, "downvote", model_selector, request)
     return ("",) + (disable_btn,) * 3
 
 
 def flag_last_response(state, model_selector, request: gr.Request):
-    logger.info(f"flag. ip: {request.client.host}")
+    if request:
+        logger.info(f"flag. ip: {request.client.host}")
     vote_last_response(state, "flag", model_selector, request)
     return ("",) + (disable_btn,) * 3
 
 
 def regenerate(state, image_process_mode, request: gr.Request):
-    logger.info(f"regenerate. ip: {request.client.host}")
+    if request:
+        logger.info(f"regenerate. ip: {request.client.host}")
     state.messages[-1][-1] = None
     prev_human_msg = state.messages[-2]
     if type(prev_human_msg[1]) in (tuple, list):
@@ -121,13 +128,15 @@ def regenerate(state, image_process_mode, request: gr.Request):
 
 
 def clear_history(request: gr.Request):
-    logger.info(f"clear_history. ip: {request.client.host}")
+    if request:
+        logger.info(f"clear_history. ip: {request.client.host}")
     state = default_conversation.copy()
     return (state, state.to_gradio_chatbot(), "", None) + (disable_btn,) * 5
 
 
 def add_text(state, text, chat_history, image, image_process_mode, include_image, request: gr.Request):
-    logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
+    if request:
+        logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0 and image is None:
         state.skip_next = True
         return (state, state.to_gradio_chatbot(include_image=include_image), "", None) + (no_change_btn,) * 5
@@ -194,7 +203,9 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
 
 
 def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_image, request: gr.Request):
-    logger.info(f"http_bot. ip: {request.client.host}")
+    t0 = time.time()
+    if request:
+        logger.info(f"http_bot. ip: {request.client.host}")
     start_tstamp = time.time()
     model_name = model_selector
 
@@ -268,13 +279,16 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
     prompt = state.get_prompt()
 
     all_images = state.get_images(return_pil=True)
-    all_image_hash = [hashlib.md5(image.tobytes()).hexdigest() for image in all_images]
+    all_image_hash = [str(uuid.uuid4()) for image in all_images]
+    # avoid unnecessary hashing
+    #all_image_hash = [hashlib.md5(image.tobytes()).hexdigest() for image in all_images]
     for image, hash in zip(all_images, all_image_hash):
         t = datetime.datetime.now()
         filename = os.path.join(LOGDIR, "serve_images", f"{t.year}-{t.month:02d}-{t.day:02d}", f"{hash}.jpg")
         if not os.path.isfile(filename):
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             image.save(filename)
+    print("duration image load-hash: %s" % (time.time() - t0), flush=True)
 
     # Make requests
     pload = {
@@ -298,6 +312,9 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
     else:
         yield state, state.to_gradio_chatbot(include_image=include_image)
 
+    output = None
+    first = True
+    t0 = time.time()
     try:
         # Stream output
         response = requests.post(worker_addr + "/worker_generate_stream",
@@ -308,6 +325,11 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
                 if data["error_code"] == 0:
                     output = data["text"][len(prompt):].strip()
                     state.messages[-1][-1] = output + stream_marker
+
+                    if first:
+                        print("duration first yield: %s" % (time.time() - t0), flush=True)
+                        first = False
+
                     if include_image:
                         yield (state, state.to_gradio_chatbot(include_image=include_image)) + (disable_btn,) * 5
                     else:
@@ -317,7 +339,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
                     state.messages[-1][-1] = output
                     if include_image:
                         yield (state, state.to_gradio_chatbot(include_image=include_image)) + (
-                        disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
+                            disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
                     else:
                         yield state, state.to_gradio_chatbot(include_image=include_image)
                     return
@@ -326,7 +348,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
         state.messages[-1][-1] = server_error_msg
         if include_image:
             yield (state, state.to_gradio_chatbot(include_image=include_image)) + (
-            disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
+                disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
         else:
             yield state, state.to_gradio_chatbot(include_image=include_image)
         return
@@ -338,7 +360,8 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
         yield state, state.to_gradio_chatbot(include_image=include_image)
 
     finish_tstamp = time.time()
-    logger.info(f"{output}")
+    if output is not None:
+        logger.info(f"{output}")
 
     with open(get_conv_log_filename(), "a") as fout:
         data = {
@@ -349,7 +372,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
             "finish": round(finish_tstamp, 4),
             "state": state.dict(),
             "images": all_image_hash,
-            "ip": request.client.host,
+            "ip": request.client.host if request else "Unknown",
         }
         fout.write(json.dumps(data) + "\n")
 
@@ -367,14 +390,14 @@ def build_demo(concurrency_count=10):
     textbox = gr.Textbox(show_label=False, placeholder="Enter text and press ENTER", container=False)
     textbox_api = gr.Textbox(visible=False)
     with gr.Blocks(title="LLaVA", theme=gr.themes.Default(), css=block_css) as demo:
-        state = gr.State()
+        state = gr.State(state0)
 
         with gr.Row():
             with gr.Column(scale=3):
                 with gr.Row(elem_id="model_selector_row"):
                     model_selector = gr.Dropdown(
-                        choices=models,
-                        value=models[0] if len(models) > 0 else "",
+                        choices=models0,
+                        value=models0[0] if len(models0) > 0 else "",
                         interactive=True,
                         show_label=False,
                         container=False)
@@ -398,7 +421,8 @@ def build_demo(concurrency_count=10):
                     top_p = gr.Slider(minimum=0.0, maximum=1.0, value=0.7, step=0.1, interactive=True, label="Top P", )
                     max_output_tokens = gr.Slider(minimum=0, maximum=1024, value=512, step=64, interactive=True,
                                                   label="Max output tokens", )
-                    chat_history = gr.Textbox(value='[]', show_label=True, label="Enter chat_history as [['human', 'bot']]")
+                    chat_history = gr.Textbox(value='[]', show_label=True,
+                                              label="Enter chat_history as [['human', 'bot']]")
 
             with gr.Column(scale=8):
                 chatbot = gr.Chatbot(elem_id="chatbot", label="LLaVA Chatbot", height=550)
@@ -424,7 +448,7 @@ def build_demo(concurrency_count=10):
             upvote_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            #queue=False,
+            # queue=False,
             api_name='upvote_click',
             concurrency_limit=None,
         )
@@ -432,7 +456,7 @@ def build_demo(concurrency_count=10):
             downvote_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            #queue=False,
+            # queue=False,
             api_name='downvote_click',
             concurrency_limit=None,
         )
@@ -440,7 +464,7 @@ def build_demo(concurrency_count=10):
             flag_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            #queue=False,
+            # queue=False,
             api_name='flag_click',
             concurrency_limit=None,
         )
@@ -451,7 +475,7 @@ def build_demo(concurrency_count=10):
             regenerate,
             [state, image_process_mode],
             [state, chatbot, textbox, imagebox] + btn_list,
-            #queue=False,
+            # queue=False,
             concurrency_limit=None,
             api_name='regenerate_btn',
         ).then(
@@ -466,7 +490,7 @@ def build_demo(concurrency_count=10):
             clear_history,
             None,
             [state, chatbot, textbox, imagebox] + btn_list,
-            #queue=False,
+            # queue=False,
             concurrency_limit=None,
             api_name='clear',
         )
@@ -475,7 +499,7 @@ def build_demo(concurrency_count=10):
             add_text,
             [state, textbox, chat_history, imagebox, image_process_mode, include_image],
             [state, chatbot, textbox, imagebox] + btn_list,
-            #queue=False,
+            # queue=False,
             concurrency_limit=None,
             api_name='textbox_btn',
         ).then(
@@ -486,29 +510,35 @@ def build_demo(concurrency_count=10):
             concurrency_limit=concurrency_count,
         )
 
+        def add_text_and_http_bot(state1, text1, chat_history1, image1, image_process_mode1, include_image1,
+                                  model_selector1, temperature1, top_p1, max_output_tokens1,
+                                  request: gr.Request):
+            t0 = time.time()
+            state1, chatbot1, textbox1, imagebox1, btn1, btn2, btn3, btn4, btn5 = \
+                add_text(state1, text1, chat_history1, image1, image_process_mode1, include_image1, request)
+            print("Duration add_text: %s" % (time.time() - t0), flush=True)
+
+            t0 = time.time()
+            ret = yield from http_bot(state1, model_selector1, temperature1, top_p1, max_output_tokens1, include_image1,
+                                      request)
+            print("Duration http_bot: %s" % (time.time() - t0), flush=True)
+
+            return ret
+
         textbox_api.submit(
-            add_text,
-            [state, textbox, chat_history, imagebox, image_process_mode, include_image],
+            add_text_and_http_bot,
+            [state, textbox, chat_history, imagebox, image_process_mode, include_image,
+             model_selector, temperature, top_p, max_output_tokens],
             [state, chatbot],
-            #queue=False,
-            concurrency_limit=None,
-            api_name='textbox_api_btn',
-            # preprocess=False,
-        ).then(
-            http_bot,
-            [state, model_selector, temperature, top_p, max_output_tokens, include_image],
-            [state, chatbot],
-            api_name='textbox_api_submit',
             concurrency_limit=concurrency_count,
-            # preprocess=False,
-            # postprocess=False,
+            api_name='textbox_api_submit',
         )
 
         submit_btn.click(
             add_text,
             [state, textbox, chat_history, imagebox, image_process_mode, include_image],
             [state, chatbot, textbox, imagebox] + btn_list,
-            #queue=False,
+            # queue=False,
             concurrency_limit=None,
             api_name='submit_btn',
         ).then(
@@ -530,21 +560,11 @@ def build_demo(concurrency_count=10):
                 load_demo,
                 [url_params],
                 [state, model_selector],
-                _js=get_window_url_params,
-#                js=get_window_url_params
-#            )
-#        elif args.model_list_mode == "reload":
-#            demo.load(
-#                load_demo_refresh_model_list,
-#                None,
-#                [state, model_selector],
-                #concurrency_limit=None,
-                #queue=False
+                # js=get_window_url_params,
             )
         elif args.model_list_mode == "reload":
             demo.load(**demo_setup_kwargs,
-                      #concurrency_limit=None,
-                      #queue=False
+                      concurrency_limit=None,
                       )
         else:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
@@ -583,14 +603,15 @@ if __name__ == "__main__":
                         choices=["once", "reload"])
     parser.add_argument("--share", action="store_true")
     parser.add_argument("--moderate", action="store_true")
-    #parser.add_argument("--embed", action="store_true")
+    # parser.add_argument("--embed", action="store_true")
     args = parser.parse_args()
     logger.info(f"args: {args}")
 
-    models = get_model_list()
+    models0 = get_model_list(args)
+    state0 = default_conversation.copy()
 
     logger.info(args)
-    demo = build_demo()
+    demo = build_demo(concurrency_count=args.concurrency_count)
     demo.queue(
         default_concurrency_limit=args.concurrency_count,
         api_open=True
