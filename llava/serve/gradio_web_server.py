@@ -201,6 +201,45 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
     state.skip_next = False
     return (state, state.to_gradio_chatbot(include_image=include_image), "", None) + (disable_btn,) * 5
 
+def get_state(model_name):
+    # First round of conversation
+    if "llava" in model_name.lower():
+        if 'llama-2' in model_name.lower():
+            template_name = "llava_llama_2"
+        elif "mistral" in model_name.lower() or "mixtral" in model_name.lower():
+            if 'orca' in model_name.lower():
+                template_name = "mistral_orca"
+            elif 'hermes' in model_name.lower():
+                template_name = "chatml_direct"
+            else:
+                template_name = "mistral_instruct"
+        elif 'llava-v1.6-34b' in model_name.lower():
+            template_name = "chatml_direct"
+        elif "v1" in model_name.lower():
+            if 'mmtag' in model_name.lower():
+                template_name = "v1_mmtag"
+            elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
+                template_name = "v1_mmtag"
+            else:
+                template_name = "llava_v1"
+        elif "mpt" in model_name.lower():
+            template_name = "mpt"
+        else:
+            if 'mmtag' in model_name.lower():
+                template_name = "v0_mmtag"
+            elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
+                template_name = "v0_mmtag"
+            else:
+                template_name = "llava_v0"
+    elif "mpt" in model_name:
+        template_name = "mpt_text"
+    elif "llama-2" in model_name:
+        template_name = "llama_2"
+    else:
+        template_name = "vicuna_v1"
+    new_state = conv_templates[template_name].copy()
+    return new_state
+
 
 def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_image, request: gr.Request):
     t0 = time.time()
@@ -218,42 +257,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
         return
 
     if len(state.messages) == state.offset + 2:
-        # First round of conversation
-        if "llava" in model_name.lower():
-            if 'llama-2' in model_name.lower():
-                template_name = "llava_llama_2"
-            elif "mistral" in model_name.lower() or "mixtral" in model_name.lower():
-                if 'orca' in model_name.lower():
-                    template_name = "mistral_orca"
-                elif 'hermes' in model_name.lower():
-                    template_name = "chatml_direct"
-                else:
-                    template_name = "mistral_instruct"
-            elif 'llava-v1.6-34b' in model_name.lower():
-                template_name = "chatml_direct"
-            elif "v1" in model_name.lower():
-                if 'mmtag' in model_name.lower():
-                    template_name = "v1_mmtag"
-                elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
-                    template_name = "v1_mmtag"
-                else:
-                    template_name = "llava_v1"
-            elif "mpt" in model_name.lower():
-                template_name = "mpt"
-            else:
-                if 'mmtag' in model_name.lower():
-                    template_name = "v0_mmtag"
-                elif 'plain' in model_name.lower() and 'finetune' not in model_name.lower():
-                    template_name = "v0_mmtag"
-                else:
-                    template_name = "llava_v0"
-        elif "mpt" in model_name:
-            template_name = "mpt_text"
-        elif "llama-2" in model_name:
-            template_name = "llama_2"
-        else:
-            template_name = "vicuna_v1"
-        new_state = conv_templates[template_name].copy()
+        new_state = get_state(model_name)
         new_state.append_message(new_state.roles[0], state.messages[-2][1])
         new_state.append_message(new_state.roles[1], None)
         state = new_state
@@ -514,6 +518,11 @@ def build_demo(concurrency_count=10):
                                   model_selector1, temperature1, top_p1, max_output_tokens1,
                                   request: gr.Request):
             t0 = time.time()
+
+            # always get fresh state for API case, chat_history is pulled in.
+            # this ensures correct conversation class too
+            state1 = get_state(model_selector1)
+
             state1, chatbot1, textbox1, imagebox1, btn1, btn2, btn3, btn4, btn5 = \
                 add_text(state1, text1, chat_history1, image1, image_process_mode1, include_image1, request)
             print("Duration add_text: %s" % (time.time() - t0), flush=True)
