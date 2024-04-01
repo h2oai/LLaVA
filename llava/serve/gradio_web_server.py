@@ -632,8 +632,14 @@ if __name__ == "__main__":
 
     logger.info(args)
     demo = build_demo(concurrency_count=args.concurrency_count)
+
+    if is_gradio_version4:
+        conc = dict(default_concurrency_limit=args.concurrency_count,)
+    else:
+        conc = dict()
+
     demo.queue(
-        default_concurrency_limit=args.concurrency_count,
+        **conc,
         api_open=True
     ).launch(
         server_name=args.host,
