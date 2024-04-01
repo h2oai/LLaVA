@@ -176,14 +176,14 @@ class ModelWorker:
         except ValueError as e:
             print("Caught ValueError:", e)
             ret = {
-                "text": server_error_msg + '_' + str(e),
+                "text": server_error_msg + '_ValueError_sglang_' + str(e),
                 "error_code": 1,
             }
             yield json.dumps(ret).encode() + b"\0"
         except Exception as e:
             print("Caught Unknown Error", e)
             ret = {
-                "text": server_error_msg + '_' + str(e),
+                "text": server_error_msg + '_Unknown_sglang_' + str(e),
                 "error_code": 1,
             }
             yield json.dumps(ret).encode() + b"\0"

@@ -209,7 +209,7 @@ class Controller:
         except requests.exceptions.RequestException as e:
             logger.info(f"worker timeout: {worker_addr}")
             ret = {
-                "text": server_error_msg + '_' + str(e),
+                "text": server_error_msg + '_' + 'worker timeout' + str(e),
                 "error_code": 3,
             }
             yield json.dumps(ret).encode() + b"\0"

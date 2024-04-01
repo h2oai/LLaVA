@@ -358,7 +358,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
                     return
                 time.sleep(0.01)
     except requests.exceptions.RequestException as e:
-        state.messages[-1][-1] = server_error_msg + '_' + str(e)
+        state.messages[-1][-1] = server_error_msg + '_' + 'rexcept' + '_' + str(e)
         if include_image:
             yield (state, state.to_gradio_chatbot(include_image=include_image)) + (
                 disable_btn, disable_btn, disable_btn, enable_btn, enable_btn)
