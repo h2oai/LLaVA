@@ -456,9 +456,11 @@ def build_demo(concurrency_count=10):
         url_params = gr.JSON(visible=False)
 
         if is_gradio_version4:
+            print("See gradio 4")
             conc = dict(concurrency_limit=None)
             conc2 = conc
         else:
+            print("See gradio 3")
             conc = dict()
             conc2 = dict(queue=False)
 
