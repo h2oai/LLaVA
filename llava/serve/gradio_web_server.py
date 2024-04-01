@@ -5,6 +5,7 @@ import json
 import os
 import time
 import uuid
+from importlib.metadata import distribution, PackageNotFoundError
 
 import gradio as gr
 import requests
@@ -23,6 +24,14 @@ headers = {"User-Agent": "LLaVA Client"}
 no_change_btn = gr.Button()
 enable_btn = gr.Button(interactive=True)
 disable_btn = gr.Button(interactive=False)
+
+try:
+    assert distribution('gradio') is not None
+    have_gradio = True
+    is_gradio_version4 = distribution('gradio').version.startswith('4.')
+except (PackageNotFoundError, AssertionError):
+    have_gradio = False
+    is_gradio_version4 = False
 
 priority = {
     "vicuna-13b": "aaaaaaa",
@@ -446,31 +455,35 @@ def build_demo(concurrency_count=10):
 
         url_params = gr.JSON(visible=False)
 
+        if is_gradio_version4:
+            conc = dict(concurrency_limit=None)
+            conc2 = conc
+        else:
+            conc = dict()
+            conc2 = dict(queue=False)
+
         # Register listeners
         btn_list = [upvote_btn, downvote_btn, flag_btn, regenerate_btn, clear_btn]
         upvote_btn.click(
             upvote_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            # queue=False,
             api_name='upvote_click',
-            concurrency_limit=None,
+            **conc2,
         )
         downvote_btn.click(
             downvote_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            # queue=False,
             api_name='downvote_click',
-            concurrency_limit=None,
+            **conc2,
         )
         flag_btn.click(
             flag_last_response,
             [state, model_selector],
             [textbox, upvote_btn, downvote_btn, flag_btn],
-            # queue=False,
             api_name='flag_click',
-            concurrency_limit=None,
+            **conc2,
         )
 
         include_image = gr.Checkbox(value=True, label="Include Image in Chat")
@@ -479,8 +492,8 @@ def build_demo(concurrency_count=10):
             regenerate,
             [state, image_process_mode],
             [state, chatbot, textbox, imagebox] + btn_list,
-            # queue=False,
-            concurrency_limit=None,
+            # ,
+            **conc2,
             api_name='regenerate_btn',
         ).then(
             http_bot,
@@ -495,7 +508,7 @@ def build_demo(concurrency_count=10):
             None,
             [state, chatbot, textbox, imagebox] + btn_list,
             # queue=False,
-            concurrency_limit=None,
+            **conc,
             api_name='clear',
         )
 
@@ -503,8 +516,7 @@ def build_demo(concurrency_count=10):
             add_text,
             [state, textbox, chat_history, imagebox, image_process_mode, include_image],
             [state, chatbot, textbox, imagebox] + btn_list,
-            # queue=False,
-            concurrency_limit=None,
+            **conc2,
             api_name='textbox_btn',
         ).then(
             http_bot,
@@ -547,8 +559,7 @@ def build_demo(concurrency_count=10):
             add_text,
             [state, textbox, chat_history, imagebox, image_process_mode, include_image],
             [state, chatbot, textbox, imagebox] + btn_list,
-            # queue=False,
-            concurrency_limit=None,
+            **conc2,
             api_name='submit_btn',
         ).then(
             http_bot,
@@ -573,7 +584,7 @@ def build_demo(concurrency_count=10):
             )
         elif args.model_list_mode == "reload":
             demo.load(**demo_setup_kwargs,
-                      concurrency_limit=None,
+                      **conc,
                       )
         else:
             raise ValueError(f"Unknown model list mode: {args.model_list_mode}")
