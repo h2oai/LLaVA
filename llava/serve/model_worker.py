@@ -192,6 +192,14 @@ class ModelWorker:
                 generated_text = generated_text[:-len(stop_str)]
             yield json.dumps({"text": generated_text, "error_code": 0}).encode() + b"\0"
 
+    def clear_torch_cache(self):
+        import torch
+        import gc
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            gc.collect()
+
     def generate_stream_gate(self, params):
         try:
             for x in self.generate_stream(params):
@@ -202,6 +210,7 @@ class ModelWorker:
                 "text": server_error_msg + '_' + str(e),
                 "error_code": 1,
             }
+            self.clear_torch_cache()
             yield json.dumps(ret).encode() + b"\0"
         except torch.cuda.CudaError as e:
             print("Caught torch.cuda.CudaError:", e)
@@ -211,12 +220,16 @@ class ModelWorker:
             }
             yield json.dumps(ret).encode() + b"\0"
         except Exception as e:
+            self.clear_torch_cache()
             print("Caught Unknown Error", e)
             ret = {
                 "text": server_error_msg + '_' + str(e),
                 "error_code": 1,
             }
             yield json.dumps(ret).encode() + b"\0"
+        except BaseException as e:
+            self.clear_torch_cache()
+            raise
 
 
 app = FastAPI()
