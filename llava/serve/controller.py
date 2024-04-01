@@ -195,7 +195,7 @@ class Controller:
         if not worker_addr:
             logger.info(f"no worker: {params['model']}")
             ret = {
-                "text": server_error_msg,
+                "text": server_error_msg + '_' + "No worker",
                 "error_code": 2,
             }
             yield json.dumps(ret).encode() + b"\0"
@@ -209,7 +209,7 @@ class Controller:
         except requests.exceptions.RequestException as e:
             logger.info(f"worker timeout: {worker_addr}")
             ret = {
-                "text": server_error_msg,
+                "text": server_error_msg + '_' + str(e),
                 "error_code": 3,
             }
             yield json.dumps(ret).encode() + b"\0"
