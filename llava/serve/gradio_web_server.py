@@ -640,7 +640,7 @@ if __name__ == "__main__":
     if is_gradio_version4:
         conc = dict(default_concurrency_limit=args.concurrency_count,)
     else:
-        conc = dict()
+        conc = dict(concurrency_count=args.concurrency_count)
 
     demo.queue(
         **conc,
