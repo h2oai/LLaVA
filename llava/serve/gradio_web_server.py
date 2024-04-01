@@ -143,7 +143,8 @@ def clear_history(request: gr.Request):
     return (state, state.to_gradio_chatbot(), "", None) + (disable_btn,) * 5
 
 
-def add_text(state, text, chat_history, image, image_process_mode, include_image, request: gr.Request):
+def add_text(state, text, chat_history, image, image_process_mode, include_image, max_output_tokens,
+             request: gr.Request):
     if request:
         logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0 and image is None:
@@ -181,9 +182,11 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
         text_with_image = text
 
     if image is not None:
-        text_with_image = text_with_image[:state.hard_limit_image]  # Hard cut-off for images
+        hard_limit = max(0, state.max_seq_len - max_output_tokens - state.image_tokens)
+        text_with_image = text_with_image[-hard_limit:]  # Hard cut-off oldest test for images
     else:
-        text_with_image = text_with_image[:state.hard_limit_text]  # Hard cut-off
+        hard_limit = max(0, state.max_seq_len - max_output_tokens)
+        text_with_image = text_with_image[-hard_limit:]  # Hard cut-off oldest test
 
     if image is not None:
         if '<image>' not in text_with_image:
@@ -209,6 +212,7 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
 
     state.skip_next = False
     return (state, state.to_gradio_chatbot(include_image=include_image), "", None) + (disable_btn,) * 5
+
 
 def get_state(model_name):
     # First round of conversation
@@ -294,7 +298,7 @@ def http_bot(state, model_selector, temperature, top_p, max_new_tokens, include_
     all_images = state.get_images(return_pil=True)
     all_image_hash = [str(uuid.uuid4()) for image in all_images]
     # avoid unnecessary hashing
-    #all_image_hash = [hashlib.md5(image.tobytes()).hexdigest() for image in all_images]
+    # all_image_hash = [hashlib.md5(image.tobytes()).hexdigest() for image in all_images]
     for image, hash in zip(all_images, all_image_hash):
         t = datetime.datetime.now()
         filename = os.path.join(LOGDIR, "serve_images", f"{t.year}-{t.month:02d}-{t.day:02d}", f"{hash}.jpg")
@@ -519,7 +523,7 @@ def build_demo(concurrency_count=10):
 
         textbox.submit(
             add_text,
-            [state, textbox, chat_history, imagebox, image_process_mode, include_image],
+            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens],
             [state, chatbot, textbox, imagebox] + btn_list,
             **conc2,
             api_name='textbox_btn',
@@ -541,7 +545,8 @@ def build_demo(concurrency_count=10):
             state1 = get_state(model_selector1)
 
             state1, chatbot1, textbox1, imagebox1, btn1, btn2, btn3, btn4, btn5 = \
-                add_text(state1, text1, chat_history1, image1, image_process_mode1, include_image1, request)
+                add_text(state1, text1, chat_history1, image1, image_process_mode1, include_image1, max_output_tokens1,
+                         request)
             print("Duration add_text: %s" % (time.time() - t0), flush=True)
 
             t0 = time.time()
@@ -562,7 +567,7 @@ def build_demo(concurrency_count=10):
 
         submit_btn.click(
             add_text,
-            [state, textbox, chat_history, imagebox, image_process_mode, include_image],
+            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens],
             [state, chatbot, textbox, imagebox] + btn_list,
             **conc2,
             api_name='submit_btn',
@@ -639,7 +644,7 @@ if __name__ == "__main__":
     demo = build_demo(concurrency_count=args.concurrency_count)
 
     if is_gradio_version4:
-        conc = dict(default_concurrency_limit=args.concurrency_count,)
+        conc = dict(default_concurrency_limit=args.concurrency_count, )
     else:
         conc = dict(concurrency_count=args.concurrency_count)
 
