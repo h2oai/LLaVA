@@ -459,10 +459,12 @@ def build_demo(concurrency_count=10):
             print("See gradio 4")
             conc = dict(concurrency_limit=None)
             conc2 = conc
+            conc3 = dict(concurrency_limit=concurrency_count)
         else:
             print("See gradio 3")
             conc = dict()
             conc2 = dict(queue=False)
+            conc3 = dict()
 
         # Register listeners
         btn_list = [upvote_btn, downvote_btn, flag_btn, regenerate_btn, clear_btn]
@@ -502,7 +504,7 @@ def build_demo(concurrency_count=10):
             [state, model_selector, temperature, top_p, max_output_tokens, include_image],
             [state, chatbot] + btn_list,
             api_name='regenerate_click',
-            concurrency_limit=concurrency_count,
+            **conc3,
         )
 
         clear_btn.click(
@@ -525,7 +527,7 @@ def build_demo(concurrency_count=10):
             [state, model_selector, temperature, top_p, max_output_tokens, include_image],
             [state, chatbot] + btn_list,
             api_name='textbox_submit',
-            concurrency_limit=concurrency_count,
+            **conc3,
         )
 
         def add_text_and_http_bot(state1, text1, chat_history1, image1, image_process_mode1, include_image1,
@@ -553,7 +555,7 @@ def build_demo(concurrency_count=10):
             [state, textbox, chat_history, imagebox, image_process_mode, include_image,
              model_selector, temperature, top_p, max_output_tokens],
             [state, chatbot],
-            concurrency_limit=concurrency_count,
+            **conc3,
             api_name='textbox_api_submit',
         )
 
@@ -568,7 +570,7 @@ def build_demo(concurrency_count=10):
             [state, model_selector, temperature, top_p, max_output_tokens, include_image],
             [state, chatbot] + btn_list,
             api_name='submit_click',
-            concurrency_limit=concurrency_count,
+            **conc3,
         )
 
         demo_setup_kwargs = dict(fn=load_demo_refresh_model_list,
