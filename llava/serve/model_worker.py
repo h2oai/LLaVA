@@ -227,9 +227,6 @@ class ModelWorker:
                 "error_code": 1,
             }
             yield json.dumps(ret).encode() + b"\0"
-        except BaseException as e:
-            self.clear_torch_cache()
-            raise
 
 
 app = FastAPI()
