@@ -26,6 +26,8 @@ class Conversation:
     sep: str = "###"
     sep2: str = None
     version: str = "Unknown"
+    hard_limit_image: int = 1200
+    hard_limit_text: int = 1536
 
     skip_next: bool = False
 
@@ -371,6 +373,8 @@ Answer the questions.""",
     offset=0,
     sep_style=SeparatorStyle.MPT,
     sep="<|im_end|>",
+    hard_limit_image=2048 + 1200,
+    hard_limit_text=3700,
 )
 
 default_conversation = conv_vicuna_v1

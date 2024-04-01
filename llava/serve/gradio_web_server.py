@@ -181,9 +181,9 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
         text_with_image = text
 
     if image is not None:
-        text_with_image = text_with_image[:1200]  # Hard cut-off for images
+        text_with_image = text_with_image[:state.hard_limit_image]  # Hard cut-off for images
     else:
-        text_with_image = text_with_image[:1536]  # Hard cut-off
+        text_with_image = text_with_image[:state.hard_limit_text]  # Hard cut-off
 
     if image is not None:
         if '<image>' not in text_with_image:
