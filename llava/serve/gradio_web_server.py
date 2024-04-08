@@ -230,6 +230,7 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
 
 
 def get_limited_text(hard_limit_tokens, text, tokenizer):
+    # from h2oGPT src/utils.py
     if tokenizer is None:
         return text[4 * hard_limit_tokens]
 
