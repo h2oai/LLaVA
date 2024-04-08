@@ -6,9 +6,16 @@ import os
 import time
 import uuid
 from importlib.metadata import distribution, PackageNotFoundError
+import requests
+
+os.environ['SCARF_NO_ANALYTICS'] = 'true'
+os.environ['DO_NOT_TRACK'] = 'true'
+os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
+os.environ['BITSANDBYTES_NOWELCOME'] = '1'
+os.environ['GRADIO_ANALYTICS_ENABLED'] = 'false'
+
 
 import gradio as gr
-import requests
 
 from llava.conversation import (default_conversation, conv_templates,
                                 SeparatorStyle)
