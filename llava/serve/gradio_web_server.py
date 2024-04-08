@@ -14,6 +14,11 @@ os.environ['HF_HUB_DISABLE_TELEMETRY'] = '1'
 os.environ['BITSANDBYTES_NOWELCOME'] = '1'
 os.environ['GRADIO_ANALYTICS_ENABLED'] = 'false'
 
+from transformers import AutoTokenizer
+
+tokenizer_dict = {}
+tokenizer_dict['llava-v1.6-34b'] = AutoTokenizer.from_pretrained('liuhaotian/llava-v1.6-34b')
+tokenizer_dict['llava-v1.6-vicuna-13b'] = AutoTokenizer.from_pretrained('liuhaotian/llava-v1.6-vicuna-13b')
 
 import gradio as gr
 
@@ -151,7 +156,10 @@ def clear_history(request: gr.Request):
 
 
 def add_text(state, text, chat_history, image, image_process_mode, include_image, max_output_tokens,
+             model_selector,
              request: gr.Request):
+    tokenizer = tokenizer_dict.get(model_selector)
+
     if request:
         logger.info(f"add_text. ip: {request.client.host}. len: {len(text)}")
     if len(text) <= 0 and image is None:
@@ -189,11 +197,11 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
         text_with_image = text
 
     if image is not None:
-        hard_limit = max(0, state.max_seq_len - max_output_tokens - state.image_tokens)
-        text_with_image = text_with_image[-hard_limit:]  # Hard cut-off oldest test for images
+        hard_limit_tokens = max(0, state.max_seq_len - max_output_tokens - state.image_tokens)
     else:
-        hard_limit = max(0, state.max_seq_len - max_output_tokens)
-        text_with_image = text_with_image[-hard_limit:]  # Hard cut-off oldest test
+        hard_limit_tokens = max(0, state.max_seq_len - max_output_tokens)
+
+    text_with_image = get_limited_text(hard_limit_tokens, text_with_image, tokenizer)
 
     if image is not None:
         if '<image>' not in text_with_image:
@@ -219,6 +227,41 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
 
     state.skip_next = False
     return (state, state.to_gradio_chatbot(include_image=include_image), "", None) + (disable_btn,) * 5
+
+
+def get_limited_text(hard_limit_tokens, text, tokenizer):
+    low = 0
+    high = len(text)
+    best_guess = text  # Initialize best_guess to ensure it's defined
+    ntokens0 = len(tokenizer.tokenize(best_guess))
+    ntokens = None
+
+    max_steps = 5
+    steps = 0
+    while low <= high:
+        mid = low + (high - low) // 2  # Calculate midpoint for current search interval
+        # Estimate a trial cut of the text based on mid
+        trial_text_length = max(int(mid * 4), 1)  # Using mid * 4 as an estimation, ensuring at least 1 character
+        trial_text = text[-trial_text_length:]  # Take text from the end, based on trial_text_length
+
+        # Tokenize the trial text and count tokens
+        ntokens = len(tokenizer.tokenize(trial_text))
+
+        if ntokens > hard_limit_tokens:
+            # If the trial exceeds the token limit, reduce 'high' to exclude the current trial length
+            high = mid - 1
+        else:
+            # If the trial does not exceed the token limit, update 'best_guess' and increase 'low'
+            best_guess = trial_text  # Update best_guess with the current trial_text
+            low = mid + 1  # Attempt to include more text in the next trial
+            if steps >= max_steps:
+                break
+        steps += 1
+
+    # 'best_guess' now contains the text that best fits the criteria
+    print("steps: %s ntokens0: %s/%s text0: %s ntokens: %s/%s text: %s" % (
+        steps, ntokens0, hard_limit_tokens, len(text), ntokens, hard_limit_tokens, len(best_guess)))
+    return best_guess
 
 
 def get_state(model_name):
@@ -530,7 +573,8 @@ def build_demo(concurrency_count=10):
 
         textbox.submit(
             add_text,
-            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens],
+            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens,
+             model_selector],
             [state, chatbot, textbox, imagebox] + btn_list,
             **conc2,
             api_name='textbox_btn',
@@ -553,6 +597,7 @@ def build_demo(concurrency_count=10):
 
             state1, chatbot1, textbox1, imagebox1, btn1, btn2, btn3, btn4, btn5 = \
                 add_text(state1, text1, chat_history1, image1, image_process_mode1, include_image1, max_output_tokens1,
+                         model_selector1,
                          request)
             print("Duration add_text: %s" % (time.time() - t0), flush=True)
 
@@ -574,7 +619,8 @@ def build_demo(concurrency_count=10):
 
         submit_btn.click(
             add_text,
-            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens],
+            [state, textbox, chat_history, imagebox, image_process_mode, include_image, max_output_tokens,
+             model_selector],
             [state, chatbot, textbox, imagebox] + btn_list,
             **conc2,
             api_name='submit_btn',
