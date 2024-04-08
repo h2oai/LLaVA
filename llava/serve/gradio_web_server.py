@@ -230,6 +230,9 @@ def add_text(state, text, chat_history, image, image_process_mode, include_image
 
 
 def get_limited_text(hard_limit_tokens, text, tokenizer):
+    if tokenizer is None:
+        return text[4 * hard_limit_tokens]
+
     low = 0
     high = len(text)
     best_guess = text  # Initialize best_guess to ensure it's defined
