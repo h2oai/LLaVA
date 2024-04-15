@@ -606,11 +606,15 @@ def build_demo(concurrency_count=10):
             print("Duration add_text: %s" % (time.time() - t0), flush=True)
 
             t0 = time.time()
-            ret = yield from http_bot(state1, model_selector1, temperature1, top_p1, max_output_tokens1, include_image1,
-                                      request)
+            res = ""
+            for ret in http_bot(state1, model_selector1, temperature1, top_p1, max_output_tokens1, include_image1,
+                                      request):
+                if ret and len(ret[-1]) == 2 and ret[-1][1]:
+                    res = ret[-1][1]
+                    yield res
             print("Duration http_bot: %s" % (time.time() - t0), flush=True)
 
-            return ret
+            return res
 
         textbox_api.submit(
             add_text_and_http_bot,
