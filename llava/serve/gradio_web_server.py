@@ -611,7 +611,6 @@ def build_demo(concurrency_count=10):
             assert not include_image1, "include_image must be False"
             for ret in http_bot(state1, model_selector1, temperature1, top_p1, max_output_tokens1, include_image1,
                                       request):
-                print(ret)
                 ret1 = ret[1]
                 if ret1 and len(ret1[-1]) == 2 and ret1[-1][-1]:
                     res = ret1[-1][-1]
