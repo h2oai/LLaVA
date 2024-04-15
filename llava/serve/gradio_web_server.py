@@ -609,8 +609,9 @@ def build_demo(concurrency_count=10):
             res = ""
             for ret in http_bot(state1, model_selector1, temperature1, top_p1, max_output_tokens1, include_image1,
                                       request):
-                if ret and len(ret[-1]) == 2 and ret[-1][1]:
-                    res = ret[-1][1]
+                print(ret)
+                if ret and len(ret[-1]) == 2 and ret[-1][-1]:
+                    res = ret[-1][-1]
                     yield res
             print("Duration http_bot: %s" % (time.time() - t0), flush=True)
 
