@@ -497,6 +497,7 @@ def build_demo(concurrency_count=10):
                                               label="Enter chat_history as [['human', 'bot']]")
 
             with gr.Column(scale=8):
+                chatbot_text = gr.Textbox(visible=False)
                 chatbot = gr.Chatbot(elem_id="chatbot", label="LLaVA Chatbot", height=550)
                 with gr.Row():
                     with gr.Column(scale=8):
@@ -623,7 +624,7 @@ def build_demo(concurrency_count=10):
             add_text_and_http_bot,
             [state, textbox, chat_history, imagebox, image_process_mode, include_image,
              model_selector, temperature, top_p, max_output_tokens],
-            [state, chatbot],
+            chatbot_text,
             **conc3,
             api_name='textbox_api_submit',
         )
