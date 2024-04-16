@@ -27,7 +27,7 @@ class Conversation:
     sep2: str = None
     version: str = "Unknown"
     max_seq_len: int = 4096
-    image_tokens: int = 1500
+    image_tokens: int = 2880
 
     skip_next: bool = False
 
